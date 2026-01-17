@@ -1,0 +1,5 @@
+Quaternions - Not Commutative
+
+This code multiplies the quaternion units i and j in both orders: first ij, then ji
+Comparing the results shows they are not equal (ij = k, but ji = −k)
+Quaternion multiplication involves distributing terms and applying Hamilton's rules (i² = j² = k² = ijk = −1)
