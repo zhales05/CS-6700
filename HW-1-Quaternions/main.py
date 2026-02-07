@@ -3,6 +3,7 @@ def multiply(q1, q2):
     a2, b2, c2, d2 = q2
     return [
         # i² = j² = k² = ijk = −1
+        # squares are negative
         a1*a2 - b1*b2 - c1*c2 - d1*d2,  # real part
         a1*b2 + b1*a2 + c1*d2 - d1*c2,  # i part
         a1*c2 - b1*d2 + c1*a2 + d1*b2,  # j part

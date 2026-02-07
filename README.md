@@ -1,5 +1,5 @@
 # CS-6700
 
 ```
-venv\Scripts\activate
+source venv/bin/activate
 ```
