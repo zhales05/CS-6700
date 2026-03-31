@@ -111,7 +111,7 @@ b = 1
 # Question 1
 points = find_points(p, a, b)
 print(f"Total points found: {len(points)}")
-# plot_points(points)
+plot_points(points)
 
 # Question 2
 generator = find_generator(points, p, a)

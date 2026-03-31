@@ -1,0 +1,7 @@
+# HW 3: Concentration of Measure
+
+In high dimensions, randomness becomes predictable. When you have many independent random variables and you increase dimensions, the more tightly the outcome is pinned to a single value. This is not intuitive because we think of randomness as a way to spread things out, but as dimensions grow, individual deviations are washed out in aggregate.
+
+In the gaussian_norm_concentration graph we can see this clearly. We generate 5,000 random vectors in several increasing numbers of dimensions, calculate the length of each vector, and then normalize. We can see the length concentrates increasingly around 1. This happens because the squared norm is a sum of n independent terms, the more terms, the more tightly the average is pinned to its expected value.
+
+We can see another example of concentration of measure when measuring the volume in the thin shell of a sphere. We know that the interior volume plus the shell volume equals the total volume. So mathematically, if we divide the volume of the inner ball by the total volume, we can get the percentage of volume found in the interior. What we see is that at low dimensions this volume is quite high, but the ratio is simply $(1-\varepsilon)^n$, and raising any number less than 1 to a high power sends it to zero. This is shown in the volume_in_shell graph with a few different shell thicknesses, and how it honestly doesn't even matter that much, at high dimensions the volume in the shell will be almost 100%.
