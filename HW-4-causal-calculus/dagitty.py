@@ -19,6 +19,10 @@ Usage:
 import random
 from itertools import combinations, chain
 
+import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
 
 # ── Graph helpers (no external libraries) ─────────────────────────────────
 
@@ -283,6 +287,71 @@ def main():
                 print(f"  {{ {', '.join(names[i] for i in sorted(z))} }}")
 
     print()
+
+    # Show the graph
+    visualize(adj, names, exposure, outcome, all_valid)
+
+
+def visualize(adj, names, exposure, outcome, adjustment_sets):
+    """Draw the DAG with color-coded nodes and display adjustment sets."""
+    n = len(adj)
+    G = nx.DiGraph()
+    G.add_nodes_from(range(n))
+    for i in range(n):
+        for j in range(n):
+            if adj[i][j] == 1:
+                G.add_edge(i, j)
+
+    # Pick the first minimal adjustment set for highlighting (if any)
+    highlight = set()
+    if adjustment_sets:
+        mins = minimal_sets(adjustment_sets)
+        highlight = mins[0]
+
+    # Node colors
+    node_colors = []
+    for i in range(n):
+        if i == exposure:
+            node_colors.append("#4CAF50")   # green
+        elif i == outcome:
+            node_colors.append("#F44336")   # red
+        elif i in highlight:
+            node_colors.append("#2196F3")   # blue
+        else:
+            node_colors.append("#BDBDBD")   # grey
+
+    labels = {i: names[i] for i in range(n)}
+
+    # Use graphviz layout if available, otherwise fall back to spring
+    try:
+        pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
+    except Exception:
+        pos = nx.spring_layout(G, seed=42, k=2.0)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=800,
+                           edgecolors="black", linewidths=1.5, ax=ax)
+    nx.draw_networkx_labels(G, pos, labels, font_size=10, font_weight="bold", ax=ax)
+    nx.draw_networkx_edges(G, pos, edge_color="#555555", arrows=True,
+                           arrowsize=20, arrowstyle="-|>",
+                           connectionstyle="arc3,rad=0.1", ax=ax)
+
+    # Legend
+    legend_handles = [
+        mpatches.Patch(color="#4CAF50", label=f"Exposure ({names[exposure]})"),
+        mpatches.Patch(color="#F44336", label=f"Outcome ({names[outcome]})"),
+    ]
+    if highlight:
+        set_str = ", ".join(names[i] for i in sorted(highlight))
+        legend_handles.append(mpatches.Patch(color="#2196F3",
+                                             label=f"Adjust for {{ {set_str} }}"))
+    legend_handles.append(mpatches.Patch(color="#BDBDBD", label="Other nodes"))
+    ax.legend(handles=legend_handles, loc="upper left", fontsize=9)
+
+    ax.set_title("Causal DAG — Back-Door Criterion", fontsize=13, fontweight="bold")
+    ax.axis("off")
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
