@@ -13,11 +13,13 @@ The back-door criterion (Pearl, 2009):
         out of X have been removed, given Z).
 
 Usage:
-  python dagitty.py
+  python dagitty.py                    # interactive mode
+  python dagitty.py graph.dagitty      # read DAGitty file directly
 """
 
-import random
-from itertools import combinations, chain
+import re
+import sys
+from itertools import chain, combinations
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -190,15 +192,155 @@ def minimal_sets(sets):
     return minimal
 
 
+# ── DAGitty format parser ────────────────────────────────────────────────
+
+def parse_dagitty(text):
+    """Parse a DAGitty-format DAG string into (adj, names, exposure, outcome, positions).
+
+    Supports node declarations with attributes like:
+        NodeName [exposure,pos="-1.0,2.5"]
+    and edge declarations like:
+        A -> B
+    """
+    # Strip the outer dag { ... } wrapper
+    text = text.strip()
+    match = re.match(r'dag\s*\{(.*)\}\s*$', text, re.DOTALL)
+    if match:
+        text = match.group(1)
+
+    nodes = {}       # name -> {exposure, outcome, pos}
+    edges = []       # (src_name, dst_name)
+
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Edge line: may contain chained edges like A -> B -> C
+        if '->' in line:
+            # Strip any trailing attributes from the last node (rare but possible)
+            parts = [p.strip() for p in line.split('->')]
+            for i in range(len(parts) - 1):
+                src = parts[i].split('[')[0].strip()
+                dst = parts[i + 1].split('[')[0].strip()
+                edges.append((src, dst))
+                # Ensure edge nodes exist in the node dict
+                for name in (src, dst):
+                    if name not in nodes:
+                        nodes[name] = {}
+            continue
+
+        # Node declaration line: NodeName [attrs]
+        node_match = re.match(r'(\S+)\s*(?:\[([^\]]*)\])?\s*$', line)
+        if node_match:
+            name = node_match.group(1)
+            attrs_str = node_match.group(2) or ""
+            attrs = {}
+            if 'exposure' in attrs_str:
+                attrs['exposure'] = True
+            if 'outcome' in attrs_str:
+                attrs['outcome'] = True
+            pos_match = re.search(r'pos="([^"]+)"', attrs_str)
+            if pos_match:
+                coords = pos_match.group(1).split(',')
+                attrs['pos'] = (float(coords[0]), float(coords[1]))
+            nodes[name] = attrs
+
+    # Build ordered name list and adjacency matrix
+    names = list(nodes.keys())
+    idx = {name: i for i, name in enumerate(names)}
+    n = len(names)
+    adj = [[0] * n for _ in range(n)]
+    for src, dst in edges:
+        adj[idx[src]][idx[dst]] = 1
+
+    # Find exposure and outcome
+    exposure = None
+    outcome = None
+    for name, attrs in nodes.items():
+        if attrs.get('exposure'):
+            exposure = idx[name]
+        if attrs.get('outcome'):
+            outcome = idx[name]
+
+    # Collect positions (if any)
+    positions = {}
+    for name, attrs in nodes.items():
+        if 'pos' in attrs:
+            positions[idx[name]] = attrs['pos']
+
+    return adj, names, exposure, outcome, positions
+
+
 # ── Input / Output ────────────────────────────────────────────────────────
 
 def read_input():
-    """Read adjacency matrix and node info from the user."""
+    """Read graph from user — either DAGitty format or manual adjacency matrix."""
     print("=" * 55)
     print("  DAGitty Clone – Back-Door Criterion Adjustment Sets")
     print("=" * 55)
     print()
+    print("Input format:")
+    print("  1) DAGitty text format")
+    print("  2) Manual (node names + adjacency matrix)")
+    choice = input("> ").strip()
+    print()
 
+    if choice == "1":
+        return read_dagitty_input()
+    else:
+        return read_manual_input()
+
+
+def read_dagitty_input():
+    """Read DAGitty format from stdin or prompt for paste."""
+    print("Paste your DAGitty DAG below, then press Enter on an empty line:")
+    lines = []
+    while True:
+        line = input()
+        if line.strip() == "":
+            break
+        lines.append(line)
+    text = "\n".join(lines)
+
+    adj, names, exposure, outcome, positions = parse_dagitty(text)
+    n = len(names)
+
+    print(f"Parsed {n} nodes: {', '.join(names)}")
+    print()
+    print("Graph edges:")
+    edge_count = 0
+    for i in range(n):
+        for j in range(n):
+            if adj[i][j] == 1:
+                print(f"  {names[i]} → {names[j]}")
+                edge_count += 1
+    if edge_count == 0:
+        print("  (none)")
+    print()
+
+    if exposure is None:
+        exposure_name = input("Enter the EXPOSURE (treatment) node: ").strip()
+        if exposure_name not in names:
+            print(f"Error: '{exposure_name}' is not a valid node name.")
+            sys.exit(1)
+        exposure = names.index(exposure_name)
+
+    if outcome is None:
+        outcome_name = input("Enter the OUTCOME node: ").strip()
+        if outcome_name not in names:
+            print(f"Error: '{outcome_name}' is not a valid node name.")
+            sys.exit(1)
+        outcome = names.index(outcome_name)
+
+    print(f"  Exposure: {names[exposure]}")
+    print(f"  Outcome:  {names[outcome]}")
+
+    return adj, names, exposure, outcome, positions
+
+
+def read_manual_input():
+    """Read adjacency matrix and node info from the user."""
     # Node names
     raw = input("Enter node names separated by commas:\n> ").strip()
     names = [s.strip() for s in raw.split(",")]
@@ -235,8 +377,8 @@ def read_input():
     print()
 
     # Exposure and outcome
-    exposure_name = input(f"Enter the EXPOSURE (treatment) node: ").strip()
-    outcome_name = input(f"Enter the OUTCOME node: ").strip()
+    exposure_name = input("Enter the EXPOSURE (treatment) node: ").strip()
+    outcome_name = input("Enter the OUTCOME node: ").strip()
 
     if exposure_name not in names:
         print(f"Error: '{exposure_name}' is not a valid node name.")
@@ -248,13 +390,25 @@ def read_input():
     exposure = names.index(exposure_name)
     outcome = names.index(outcome_name)
 
-    return adj, names, exposure, outcome
+    return adj, names, exposure, outcome, None
 
 
 def main():
-    import sys
-
-    adj, names, exposure, outcome = read_input()
+    # If a file argument is given, read DAGitty format from it directly
+    if len(sys.argv) > 1:
+        with open(sys.argv[1]) as f:
+            text = f.read()
+        adj, names, exposure, outcome, positions = parse_dagitty(text)
+        n = len(names)
+        print(f"Parsed {n} nodes from {sys.argv[1]}: {', '.join(names)}")
+        if exposure is None:
+            exposure_name = input("Enter the EXPOSURE (treatment) node: ").strip()
+            exposure = names.index(exposure_name)
+        if outcome is None:
+            outcome_name = input("Enter the OUTCOME node: ").strip()
+            outcome = names.index(outcome_name)
+    else:
+        adj, names, exposure, outcome, positions = read_input()
 
     print()
     print("-" * 55)
@@ -289,10 +443,10 @@ def main():
     print()
 
     # Show the graph
-    visualize(adj, names, exposure, outcome, all_valid)
+    visualize(adj, names, exposure, outcome, all_valid, positions)
 
 
-def visualize(adj, names, exposure, outcome, adjustment_sets):
+def visualize(adj, names, exposure, outcome, adjustment_sets, positions=None):
     """Draw the DAG with color-coded nodes and display adjustment sets."""
     n = len(adj)
     G = nx.DiGraph()
@@ -322,11 +476,15 @@ def visualize(adj, names, exposure, outcome, adjustment_sets):
 
     labels = {i: names[i] for i in range(n)}
 
-    # Use graphviz layout if available, otherwise fall back to spring
-    try:
-        pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
-    except Exception:
-        pos = nx.spring_layout(G, seed=42, k=2.0)
+    # Use DAGitty positions if provided, otherwise fall back to layout algorithms
+    if positions and len(positions) == n:
+        # DAGitty uses y-axis inverted (negative = top), flip for matplotlib
+        pos = {i: (positions[i][0], -positions[i][1]) for i in positions}
+    else:
+        try:
+            pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
+        except Exception:
+            pos = nx.spring_layout(G, seed=42, k=2.0)
 
     fig, ax = plt.subplots(figsize=(8, 6))
     nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=800,
